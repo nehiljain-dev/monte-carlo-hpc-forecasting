@@ -1,0 +1,28 @@
+﻿# data (127 MB, download separately - see README)
+data/
+*.txt.bz2
+
+# compiled binaries
+*.exe
+*.o
+a.out
+src/mpi_version
+src/hybrid
+src/sequential
+src/openmp
+
+# mlflow local store
+mlruns/
+mlflow.db
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ide / os
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

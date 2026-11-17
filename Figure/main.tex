@@ -1,0 +1,1022 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\documentclass[12pt,a4paper]{article}
+\usepackage{xcolor}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{3}
+\usepackage{iftex}
+\ifPDFTeX
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{textcomp}
+\else
+\usepackage{unicode-math}
+\defaultfontfeatures{Scale=MatchLowercase}
+\defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{%
+\usepackage[stretch=10,shrink=10]{microtype}
+\UseMicrotypeSet[protrusion]{basicmath}
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{%
+\IfFileExists{parskip.sty}{%
+\usepackage{parskip}
+}{%
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{%
+\KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{longtable,booktabs,array}
+\usepackage{multirow}
+\newcounter{none}
+\usepackage{calc}
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx}
+
+% ===== IMAGES: center + fit to page width =====
+\setkeys{Gin}{width=0.85\textwidth,height=!,keepaspectratio}
+\let\oldincludegraphics\includegraphics
+\renewcommand{\includegraphics}[2][]{%
+  \begin{center}\oldincludegraphics[#1]{#2}\end{center}}
+% ==============================================
+
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{%
+\sbox\pandoc@box{#1}%
+\Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+\Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+\ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi%
+\ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+\else\usebox{\pandoc@box}%
+\fi%
+}
+\def\fps@figure{htbp}
+\makeatother
+\usepackage{float}
+\usepackage{hyperref}
+\hypersetup{hidelinks}
+
+\begin{document}
+\sloppy  % Allows slightly more flexible line breaking to avoid overfull hboxes
+
+%% ============ CUSTOM COVER PAGE ============
+\begin{titlepage}
+  \centering
+  \vspace*{0.4cm}
+
+  % University logo
+  \oldincludegraphics[width=0.22\textwidth]{media/image1.png}
+
+  \vspace{0.3cm}
+  {\large\bfseries University of Messina\par}
+  {\normalsize Master Degree in Data Science\par}
+  {\normalsize High Performance Computing --- Project Report\par}
+
+  \vspace{0.4cm}
+  \rule{\linewidth}{0.4pt}
+  \vspace{0.3cm}
+
+  {\Large\bfseries Hybrid MPI + OpenMP Monte Carlo Forecasting
+  of Household Electric Power Consumption\par}
+
+  \vspace{0.3cm}
+  \rule{\linewidth}{0.4pt}
+
+  \vspace{0.6cm}
+  \begin{minipage}[t]{0.45\textwidth}
+    \raggedright
+    {\large\bfseries {Professor}\par}
+    {\large\bfseries Prof.\ Salvatore Distefano\par}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[t]{0.45\textwidth}
+    \raggedleft
+    {\large\bfseries {Student}\par}
+    {\large\bfseries Nehil Jain\par}
+    {\large\bfseries Matricola: 562482\par}
+  \end{minipage}
+
+  \vspace{0.6cm}
+  {\normalsize Academic Year 2025/2026\par}
+\end{titlepage}
+%% ==========================================
+
+%% Page numbering: cover is unnumbered, ToC is roman, content restarts at 1
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+\pagenumbering{arabic}
+
+\section{Introduction}\label{introduction}
+\subsection{General Introduction}\label{general-introduction}
+
+Forecasting electric power consumption is a central problem in modern
+energy management. Utilities, grid operators and households all benefit
+from reliable short-term predictions of demand: they enable better
+generation scheduling, demand-response programs, tariff planning and
+anomaly detection. Consumption time series, however, are inherently
+noisy and uncertain, driven by human behaviour, weather and appliance
+usage patterns. Deterministic point forecasts are therefore of limited
+value; what decision makers need is a probabilistic forecast, i.e. an
+estimate of the expected consumption together with a quantification of
+its uncertainty.
+
+Monte Carlo simulation is a natural tool for this purpose. By simulating
+a stochastic model of the consumption process many thousands of times,
+one obtains an empirical distribution of future trajectories from which
+means and confidence intervals can be derived. The accuracy of these
+estimates grows with the number of simulated trajectories, which makes
+the method computationally expensive and, at the same time, an excellent
+candidate for parallelization.
+
+\subsection{Introduction to the Scenario and Related Issues}
+
+The scenario considered in this project is the 30-day probabilistic
+forecast of seven electrical quantities measured in a single household:
+global active power, global reactive power, voltage, global intensity
+and three sub-metering energy channels. The input is the UCI
+``Individual household electric power consumption'' dataset [{1}],
+containing about 2 million one-minute measurements collected over almost
+four years. For each of the seven quantities, the forecast must provide
+the expected daily value and a 95\% confidence interval for each of the
+next 30 days, at one-minute simulation resolution (1,440 steps per day).
+
+The computational issue is the sheer size of the simulation workload.
+With 50,000 Monte Carlo trajectories per quantity, 7 quantities, 30 days
+and 1,440 steps per day, the program must execute approximately 15
+billion stochastic update steps, each involving the generation of a
+Gaussian random number and the evaluation of an exponential demand-shape
+function. On a single core of a modern laptop this requires more than
+eleven minutes (675.1 s measured); embedded in any interactive or
+repeated-analysis workflow, such latency is unacceptable.
+
+\subsection{Motivations}
+
+The primary motivation of the project is to reduce the execution time of
+the fore-casting computation by exploiting all the parallel resources of
+modern hardware, following the two complementary paradigms studied in
+the course: message pass-ing between processes (MPI) for inter-node,
+distributed-memory parallelism, and multithreading within a process
+(OpenMP) for intra-node, shared-memory parallelism.
+
+The problem offers a particularly clean case study because it
+naturally exposes both forms of parallelism at the same time: the 50,000
+simulations are independent data items that can be partitioned across
+processes (data parallelism), while the seven per-column forecasting
+pipelines are independent functional units that can be executed
+concurrently by threads (task parallelism).
+
+A secondary, educational motivation is to quantify and explain the
+limits of each paradigm on real hardware: the granularity ceiling of
+task parallelism (only seven tasks exist), the load imbalance among
+tasks of unequal duration, and the heterogeneity of a modern hybrid CPU
+(performance and efficiency cores), all of which leave measurable
+signatures in the experimental results of Chapter 7.
+
+\subsection{Existing Solutions and Proposed Solution}
+
+Monte Carlo methods are classified as ``embarrassingly parallel'' in the
+literature, since trajectories are mutually independent [5].
+Standard parallel formulations partition the trajectory set across
+workers and combine partial statistics at the end; this approach is used
+both in distributed-memory implementations based on MPI and in
+shared-memory implementations based on OpenMP or GPU computing [4].
+Special care is required for the random number streams: each trajectory
+must receive an independent, reproducible stream regardless of which
+worker executes it, otherwise the parallel result differs from the
+sequential one or, worse, trajectories become statistically correlated.
+
+The solution proposed in this project is a hybrid MPI + OpenMP
+implementation that combines both decompositions in a single executable,
+following the structure required by the project specification: MPI
+implements data parallelism by block-partitioning the simulation index
+space across ranks, while OpenMP implements task parallelism by
+executing the seven column pipelines as explicit tasks with declared
+dependencies inside each rank. A deterministic, position-based seeding
+scheme guarantees that the sequential, pure OpenMP, pure MPI and hybrid
+versions produce bit-identical statistical results, providing a built-in
+correctness verification. Four versions of the program were implemented
+and benchmarked: sequential (baseline $T_1$), pure OpenMP, pure MPI, and hybrid.
+
+\section{Problem Rationale}
+
+\subsection{Description of the Problem}
+
+Given the historical measurements of the seven electrical quantities,
+the program must produce, for each quantity c \{0,\ldots,6\} and each
+future day d \{1,\ldots,30\}, the expected daily average value and a
+95\% confidence interval. The consumption process is modelled as a
+discrete-time stochastic process with drift, volatility and a
+deterministic intra-day demand pattern. Each Monte Carlo trajectory
+simulates 30 days at one-minute resolution; the per-day averages of all
+trajectories are then aggregated into the required statistics. The
+problem is computation-bound: the input parameters are small (three scalars per column), the output is
+small (three $7\times30$ matrices), but the simulation kernel performs on the
+order of 15 billion floating-point updates.
+
+\subsection{Current Sequential Solution and Algorithm}
+
+The sequential algorithm proceeds in four phases. (1) Loading: the CSV
+dataset is parsed and each column is normalized with a z-score
+transformation, which makes the model parameters comparable across
+columns of different physical units. (2) Parameter estimation: for each
+column, the starting value, the volatility and the drift are estimated
+from the most recent window of the historical series. (3) Simulation:
+for each column, 50,000 independent trajectories are generated; every
+trajectory evolves the value minute by minute with the update val $\leftarrow$val +
+drift/1440 + z\,$\cdot$\,vol\,$\cdot$\,pattern(hour)\,$\cdot$\,0.01, where z is a standard
+Gaussian sample produced by a Box-Muller transform over a linear
+congruential generator, and pattern(hour) is a deterministic shape with
+morning (08:00) and evening (18:00) demand peaks. Per-day sums and
+squared sums are accumulated. (4) Reporting: sums are converted into
+means and 95\% confidence intervals, de-normalized back to physical
+units and written to the report. The structure of the sequential program
+is shown in Figure 1; the highlighted simulation block accounts for
+almost the entire execution time (T= 675.1 s) and is the target of
+parallelization.
+
+\includegraphics[width=4.05278in,height=6.62292in]{media/image2.png}
+
+\begin{quote}
+\emph{Figure 1: Flowchart of the sequential algorithm. After loading and
+normalizing the dataset, the seven columns are processed one at a time;
+for each column, parameters are estimated, 50,000 Monte Carlo
+trajectories are simulated (30 days$\times$ 1,440 one-minute steps), and
+per-day statistics are computed. The highlighted simulation block
+dominates the execution time and is the target of parallelization.}
+\end{quote}
+
+\subsection{Existing Parallel Solutions, State of the Art and Related Work}
+
+Parallel Monte Carlo is a classical topic in high performance computing.
+Rosenthal [5] formalizes the conditions under which Monte Carlo
+estimators can be computed in parallel without bias, the key requirement
+being independent random streams per work unit. Foster's
+methodology [6] --- partitioning, communication, agglomeration and
+mapping --- provides the standard design framework that this report
+follows chapter by chapter. In distributed-memory settings, the dominant
+pattern is the partition of trajectories across MPI ranks followed by a
+collective reduction of partial sums [4]; in shared-memory settings,
+OpenMP worksharing or task constructs distribute trajectories or
+higher-level functional units across threads. Hybrid MPI+OpenMP designs
+combine the two, using MPI between nodes and OpenMP within a node, which
+reduces the number of MPI ranks, the memory footprint and the
+communication volume compared with a pure MPI configuration of equal
+worker count. The present project follows this hybrid pattern, with one
+specific design twist dictated by the assignment: the MPI level carries
+the data decomposition while the OpenMP level carries the task
+decomposition.
+
+Monte Carlo estimation rests on the law of large numbers: if $X_1$,
+\ldots{} , $X_n$ are i.i.d.\ random variables with finite expectation, then
+in this project X is the daily average consumption of a
+column on a given future day, and each realization is produced by one
+simulated trajectory. Independence across trajectories is also what
+makes the method parallel-friendly: any subset of trajectories can be
+computed by any processing element, and partial sums simply add up. The
+random number generator used is a 32-bit linear congruential generator
+combined with the Box-Muller transform; while statistically simple, it
+is fully adequate for this workload and, crucially, it is seedable per
+trajectory, which the parallel design exploits.
+
+\subsection{Adopted Stochastic Model}
+
+Each column c is described by three parameters estimated from the
+historical data: a starting level, a volatility and a linear drift. A
+trajectory evolves the normalized value for 43,200 one-minute steps (30
+days). The intra-day modulation $\text{pattern}(h) = 1 +
+0.3\cdot\exp(-0.5\cdot((h-8)/2)^2) + 0.4\cdot\exp(-0.5\cdot((h-18)/2)^2)$ amplifies
+volatility around the morning and evening demand peaks observed in the
+dataset. For each day the trajectory contributes its daily average to
+two accumulators, sum\_d and sum2\_d, from which the mean and the 95\%
+confidence interval (mean $\pm$ 1.96\,$\cdot$\,$\sigma$) are obtained at the end. The seed of
+trajectory s of column c is the pure function seed = c\,$\cdot$\,NUM\_SIMS + s +
+1: it does not depend on which process or thread executes the
+trajectory, which (i) makes every parallel version reproduce the sequential results exactly and (ii)
+assigns disjoint random streams to different columns, avoiding
+cross-column correlation.
+
+\subsection{Decomposition of the Problem}
+
+The problem exposes two orthogonal axes of decomposition, and the
+project specification assigns one technology to each. The first axis is
+the simulation index space: the 50,000 trajectories of every column are
+independent data items of identical computational cost, so the index
+range [0, NUM\_SIMS) can be partitioned into contiguous blocks, one
+per MPI rank --- this is the data decomposition. Rank r of P processes
+the global indices [r\,$\cdot$\,N/P, (r+1)\,$\cdot$\,N/P) for all seven columns and
+accumulates partial sums. Because the seed is a function of the global
+index only, the union of the blocks reproduces the sequential
+computation exactly, and the partial sums of the blocks add up to the
+full-range sums.
+
+The second axis is the set of columns: the seven per-column pipelines
+are functionally independent units that read and write disjoint data ---
+this is the task decomposition, implemented with OpenMP explicit tasks
+inside each rank. In the pure OpenMP version each column pipeline is
+itself split into three dependent tasks --- parameter estimation,
+simulation and statistics --- chained by OpenMP depend clauses so that
+the runtime enforces their order automatically; in the hybrid version,
+where the parameters are estimated once and broadcast by MPI, the
+in-rank pipeline reduces to two dependent tasks (simulation and local
+reduce), chained by the same kind of depend clause. Figure 2 shows the
+parallel structure obtained by combining the two decompositions; it is
+the parallel counterpart of the sequential flowchart of Figure 1, with
+the column loop replaced by concurrent column pipelines and the
+trajectory range replaced by per-rank blocks.
+
+\includegraphics[width=4.06458in,height=5.95972in]{media/image3.png}
+
+\begin{quote}
+\emph{Figure 2: Parallelized algorithm (hybrid version). Blue regions
+mark the MPI level: the 50,000 simulations are block-decomposed across P
+ranks (data parallelism), with one initial broadcast of the model
+parameters and one final sum-reduction of the partial statistics. Red
+regions mark the OpenMP level inside each rank: the seven column
+pipelines execute as independent tasks with explicit dependency clauses
+(task parallelism); in the hybrid each pipeline is a two-stage simulate
+$\rightarrow$ local-reduce chain (the estimation stage is performed once on rank 0
+and broadcast), joined by a taskwait before the reduction. The pure MPI
+version corresponds to this figure with one thread per rank; the pure
+OpenMP version corresponds to a single rank executing the full
+simulation range.}
+\end{quote}
+
+\subsection{Partitioning Strategy}
+
+At the MPI level a static block partitioning is used: rank r receives
+the contiguous block [r\,$\cdot$\,N/P, (r+1)\,$\cdot$\,N/P) of trajectory indices,
+computed with integer arithmetic so that block sizes differ by at most
+one trajectory. Since every trajectory performs exactly the same number
+of operations, static block partitioning yields near-perfect load
+balance at any rank count and requires no scheduling communication. At
+the OpenMP level the partitioning unit is the column task: seven tasks
+are created by a single thread and executed by the team under the
+runtime's task scheduler. The granularity of this level
+is fixed by the problem (seven columns), which bounds the useful thread
+count at seven; this granularity limit is analysed quantitatively in
+Chapter 7.
+
+\subsection{Rationale for Combined Data and Task Parallelism}
+
+The two decompositions are complementary in exactly the dimensions where
+each one is weak. The task decomposition has a hard ceiling of seven
+workers and suffers from load imbalance because the seven tasks have
+unequal durations (Section 5.2); but within a shared-memory node it
+requires no communication at all, since tasks write disjoint slots of
+shared arrays. The data decomposition scales to any number of workers
+with near-perfect balance, but each additional MPI rank adds a process,
+with its own address space and its participation in the collective
+operations. The MPI/hybrid composition uses few MPI ranks (data
+parallelism between them) and several threads inside each rank (task
+parallelism), obtaining the scalability of the former and the
+zero-communication sharing of the latter. The experimental results
+confirm the rationale: on this 8-core machine the data-parallel MPI
+level scales best (fastest at 8 ranks), while the hybrid 4$\times$2
+configuration is the strongest hybrid and remains competitive; on a
+larger cluster, where pure MPI would need many more ranks, the hybrid
+composition is expected to lead.
+
+\subsection{Challenges in Decomposition and Partitioning}
+
+Three challenges emerged. First, reproducibility: a naive parallel
+design that seeds trajectories by thread or rank identifier produces
+results that depend on the worker count; the position-based seeding
+scheme described in Section 2.5 was introduced precisely to decouple the
+random streams from the execution layout. Second, the aggregation
+semantics: means and confidence intervals cannot be averaged across
+partial results, so the design must exchange raw sums and finalize the
+statistics only once, after the global reduction (Chapter 4). Third, the
+fixed task granularity: with only seven tasks of unequal duration, the
+task level alone cannot use more than seven workers efficiently; the
+chosen remedy is architectural --- placing the scalable data
+decomposition at the other level --- rather than an artificial
+refactoring of the task structure.
+
+\section{Communication}
+
+\subsection{Inter-Process Communication (MPI)}
+
+The MPI communication pattern of the program is minimal and fully
+collective; no point-to-point messages are used. Two events occur per
+run. At the beginning, rank 0 --- the only rank that reads the dataset
+--- broadcasts the estimated model parameters to all ranks with
+MPI\_Bcast: 21 doubles of parameters (start, volatility, drift for each
+of the seven columns) plus 14 doubles of normalization constants, 280
+bytes in total. At the end, the partial per-day sums of all ranks are
+combined with a single MPI\_Reduce with operation MPI\_SUM towards rank
+0: two arrays of $7\times30$ doubles (sum\_d and sum2\_d), 3.36 KB in total.
+The interaction pattern is therefore a star centred on rank 0, shown in
+Figure 4: worker ranks never communicate with each other, and no
+communication at all takes place during the simulation phase.
+
+\includegraphics[width=4.05278in,height=2.79583in]{media/image4.png}
+
+\begin{quote}
+\emph{Figure 4: Task interaction graph for the MPI level.} \emph{Nodes
+represent MPI processes; edges represent actual data exchanges, in
+contrast with Figure 3 where edges represent precedence constraints. The
+pattern is a star centred on rank 0: one MPI\_Bcast of 35 doubles at the
+start and one MPI\_Reduce (SUM) of 420 doubles at the end. The total
+communication volume is constant (3.6 KB) regardless of the number of
+simulations, so the communication-to-computation ratio tends to zero as
+the problem size grows.}
+\end{quote}
+
+\subsection{Intra-Process Communication (OpenMP)}
+
+Inside a rank, the column-pipeline tasks communicate only implicitly,
+through the shared address space. The design eliminates synchronization
+needs by construction: each task of column c reads and writes only the
+slots of index c in
+the shared per-column arrays (params[c], sums[c], sums2[c],
+and the result slots), so the three stages of a column hand data to each
+other through these slots while different columns never share memory.
+Since no two tasks ever touch the same memory locations, no critical
+sections, atomics or reduction clauses are required during execution.
+The only synchronization points are the task-creation single region, the
+depend clauses that order the three stages of each column, and the final
+taskwait, whose role is precedence enforcement rather than data
+exchange. This zero-contention layout is the main efficiency advantage
+of the task level and one of the reasons for combining it with MPI
+instead of using MPI alone.
+
+\subsection{Task Dependencies}
+
+The precedence structure of the computation is captured by the task
+dependency graph of Figure 3. A first node T\_L (dataset loading and
+normalization) precedes everything; each of the seven columns is then a
+three-stage pipeline --- estimate\_params $\rightarrow$ run\_column\_chunk
+$\rightarrow$ finalize\_stats --- and the seven pipelines lie on parallel paths with
+no edges between them, because each pipeline reads and writes only its
+own column's data; a final node T\_R (aggregation and
+report) requires the completion of all seven pipelines. In the
+implementation the precedence edges are written explicitly in the source
+code through OpenMP depend clauses on per-column tokens: the estimation
+task declares depend(out: params[c]), the simulation task declares
+depend(in: params[c]) and depend(out: sums[c]), and the
+statistics task declares depend(in: sums[c]); a final taskwait
+implements the fan-in before the report (or, in the MPI versions, before
+the reduction). Two quantitative properties follow directly from the
+shape of the graph: the maximum degree of concurrency is 7 (seven
+independent column pipelines can run at once), which upper-bounds the
+useful thread count of the task level; and the critical path has
+constant length --- the three stages of one column (T\_L $\rightarrow$ estimate
+$\rightarrow$ simulate $\rightarrow$ finalize $\rightarrow$ T\_R) --- independent of the number of workers. In
+the hybrid version the estimation stage is hoisted out of the task graph
+(it is performed once on rank 0 and broadcast), so each in-rank column
+pipeline is the two-stage chain simulate $\rightarrow$ local-reduce, declared with
+depend(out: sums[c]) followed by depend(in: sums[c]); the
+maximum degree of concurrency (seven) and the per-column independence
+are unchanged.
+
+\includegraphics[width=4.05833in,height=2.78194in]{media/image5.png}
+
+\begin{quote}
+\emph{Figure 3: Task dependency graph. Nodes are tasks and directed
+edges express precedence constraints (``must complete before''). Each
+column is a three-stage pipeline (estimate $\rightarrow$ simulate $\rightarrow$ finalize); the
+seven column pipelines lie on parallel paths with no edges between them,
+so the maximum degree of concurrency is 7, while the critical path is
+the three stages of a single column. The fan-out and fan-in edges
+correspond directly to the OpenMP depend(in)/depend(out) clauses on the
+per-column tokens and the final taskwait in the source code. In the
+hybrid version a reduced form of this graph is instantiated inside every
+MPI rank: since the parameters are broadcast once by rank 0, the
+estimation stage is dropped and each column becomes a two-stage pipeline
+(simulate $\rightarrow$ local reduce) operating on the rank's simulation block,
+while the seven pipelines remain mutually independent.}
+\end{quote}
+
+\subsection{Balancing Communication and Computation}
+
+The communication-to-computation ratio of the design is asymptotically
+ideal. The communication volume is constant --- two collective
+operations totalling about 3.6 KB --- while the computation grows
+linearly with NUM\_SIMS: with the benchmark workload, the program
+executes 15 billion update steps against a few microseconds of message
+transfer. Measured wall times confirm the imbalance in favour of
+computation: in every parallel run the difference between the simulation
+time and the total wall time (which includes both collectives) is at
+most a few milliseconds out of hundreds of seconds. As a consequence,
+the speedup limits observed in Chapter 7 are not caused by
+communication, but by hardware-level effects (frequency scaling and core
+heterogeneity) and by the task-granularity ceiling.
+
+\subsection{Challenges in Communication}
+
+The main communication-related challenge was semantic rather than
+volumetric: choosing what to reduce. Reducing finished statistics (means
+or confidence bounds) is incorrect, because the mean of partial means with equal
+weights only coincides with the global mean if all blocks have exactly
+equal size, and confidence bounds do not compose at all. The
+implementation therefore reduces the raw accumulators sum\_d and
+sum2\_d, which are exactly additive, and computes the statistics only
+once on rank 0 after the reduction. A second, minor challenge is
+thread-safety of the MPI library: the hybrid version initializes MPI
+with MPI\_Init\_thread requesting MPI\_THREAD\_FUNNELED and confines
+every MPI call to the master thread outside the parallel regions, which
+satisfies the funnelled contract on any compliant implementation.
+
+\section{Aggregation}
+
+\subsection{Role of Aggregation in the Algorithm}
+
+Aggregation transforms the contributions of 50,000 independent
+trajectories, possibly computed by different threads and processes, into
+the final per-day statistics of each column. It operates at three nested
+levels: within a trajectory (1,440 per-minute values are averaged into
+one daily value), within a worker (daily values of all local
+trajectories are accumulated into sum\_d and sum2\_d), and across
+workers (partial accumulators are sum-reduced into global accumulators).
+
+\subsection{Aggregation Strategy and Implementation}
+
+The strategy follows a single invariant: only raw additive quantities
+cross worker boundaries. Each trajectory contributes its daily average a
+to sum\_d[day] and $a^2$ to sum2\_d[day]; these arrays are exactly
+additive across any partition of the trajectory set, so the MPI level
+combines them with one MPI\_Reduce(MPI\_SUM). Rank 0 then applies the
+finalization once: mean = sum\_d/N, variance = sum2\_d/N $-$ mean$^2$, and the
+95\% interval mean $\pm$ 1.96\,$\cdot$\,$\sigma$. At the OpenMP level no reduction operation
+is needed at all, because tasks own disjoint columns and write disjoint
+accumulator slots; aggregation across threads is achieved purely by
+memory layout. The mean-of-means pitfall --- finalizing statistics on
+partial data and averaging them afterwards --- is thereby avoided by
+construction.
+
+\subsection{Frequency and Granularity of Aggregation}
+
+Aggregation frequency is the minimum possible: exactly once per run, at
+the end of the simulation phase. The granularity is coarse on the
+communication side (one message of 420 doubles per rank) and fine on the
+computation side (per-day accumulation inside the innermost loop). This
+choice maximizes the arithmetic intensity between synchronization
+points; the alternative of periodic partial reductions would only add
+latency without any benefit, since no worker needs intermediate global
+results.
+
+\subsection{Challenges in Aggregation}
+
+Two details required care. First, numerical robustness: the variance
+formula sum2/N $-$ mean$^2$ can produce small negative values due to
+floating-point cancellation when the variance is close to zero (this
+actually happens for the nearly constant Sub\_metering\_1 column); the
+implementation clamps negative variances to zero before taking the
+square root. Second, floating-point associativity: parallel summation
+changes the order of additions, which in general can alter the last bits
+of the result. In this design the per-column accumulation order within a
+block is identical to the sequential order, and block sums are combined
+in rank order by the reduction; experimentally, all configurations
+reproduced the sequential statistics to every printed digit (Section
+6.6).
+
+\section{Mapping}
+
+\subsection{Mapping Strategy for Processes and Threads}
+
+The mapping follows the standard hybrid scheme. MPI ranks are mapped by
+the runtime (Microsoft MPI's mpiexec) to the cores of
+the machine, one process per worker slot; inside each rank,
+omp\_set\_num\_threads fixes the team size and the OpenMP runtime maps
+threads to hardware threads. Column tasks are mapped to threads
+dynamically by the OpenMP task scheduler: any idle thread of the team
+picks the next ready task. With seven tasks and t threads, the schedule
+consists of 7/t waves; dynamic assignment lets a thread that finishes a
+short task immediately steal a remaining one, which partially
+compensates the duration imbalance among columns.
+
+\subsection{Load Balancing}
+
+The two levels have opposite balance characteristics, and the measured
+data quantifies both. At the MPI level, blocks of equal size imply equal
+work, so the data level is balanced by construction. At the OpenMP level
+the seven tasks are far from equal: the sequential per-column times
+range from 62.3 s (Sub\_metering\_2) to 148.2 s (Global\_active\_power),
+a 2.38$\times$ spread, shown in Figure 8. Since the algorithm performs an
+identical number of arithmetic operations per column, the spread is a
+hardware effect: columns whose normalized values evolve close to zero
+generate denormalized floating-point intermediates, which the CPU
+processes one to two orders of magnitude slower than normalized numbers.
+The consequence for scheduling is direct: the task-parallel makespan can
+never be smaller than the longest task, so the task level is
+upper-bounded by $T_1$ / $\max_c(t_c)$ = 675.1 / 148.2 $\approx$ 4.56, well below the
+ideal 7.
+
+\includegraphics[width=4.05833in,height=2.16042in]{media/image6.png}
+
+\begin{quote}
+\emph{Figure 8: Per-column task duration measured in the sequential run.
+Although every column executes the same number of operations, durations
+range from 62.3 s to 148.2 s (2.38$\times$), mainly because near-zero
+normalized values produce denormalized floating-point intermediates that
+the CPU processes much more slowly. The longest task lower-bounds the
+task-parallel makespan.}
+\end{quote}
+
+\subsection{Impact of Mapping on Performance}
+
+The test machine's CPU is heterogeneous --- 4
+performance cores plus 4 efficiency cores --- and the mapping of
+processes to core types proved to be a first-order performance factor.
+Three measured effects demonstrate it. (i) With 8 MPI ranks, four ranks
+necessarily run on efficiency cores; although 8 ranks (186.0 s) still
+improve on 4 ranks (250.3 s) because the extra workers add real
+throughput, the efficiency falls to 45\% --- the efficiency-core ranks
+and the lower all-core turbo frequency prevent the speedup from
+doubling. (ii) With only 2 ranks, the operating system scheduler does
+not always keep both processes on performance cores; repeated runs
+measured around 354 s, above the 330 s expected from two clean
+performance cores, indicating occasional placement of a rank on an
+efficiency core. (iii) Under full thread concurrency the per-task
+durations inflate uniformly --- with 7 OpenMP threads every task took
+250 s against 62--148 s in isolation --- because the all-core turbo
+frequency is substantially lower than the single-core turbo frequency.
+These observations explain quantitatively why measured efficiencies at n
+= 8 cannot approach 100\% on this class of hardware, independently of
+the algorithm.
+
+\section{Code Implementation}
+
+The project consists of four C programs sharing a single header
+(common.h) that contains the dataset loader, the parameter estimator,
+the simulation kernel and the reporting functions. Sharing the kernel
+guarantees that all versions execute literally the same arithmetic. The
+programs are built with GCC (MinGW) and
+Microsoft MPI on Windows; all paths and the sequential reference time
+are configurable from the command line.
+
+\subsection{The Shared Kernel and the Seeding Scheme}
+
+The kernel simulates the global trajectory indices \texttt{[sim\_begin, sim\_end)} of one
+column and accumulates per-day sums. The seed line is the cornerstone of
+the parallel design:
+
+\begin{verbatim}
+static void run_column_chunk(int c, int sim_begin, int sim_end,
+    double start, double vol, double drift,
+    double sum_d[DAYS], double sum2_d[DAYS]) {
+  for (int sim = sim_begin; sim < sim_end; sim++) {
+    unsigned int seed =
+        (unsigned int)((long long)c * NUM_SIMS + sim + 1);
+    /* ... 30 days x 1440 one-minute stochastic steps ... */
+  }
+}
+\end{verbatim}
+
+Because the seed depends only on the pair (column, global index), the
+trajectory computed for a given (c, sim) is identical no matter which
+version, rank or thread executes it, and any partition of the index
+range yields partial sums that add exactly to the full-range sums.
+
+\subsection{OpenMP Version --- Task Parallelism with Explicit Dependencies}
+
+\begin{verbatim}
+#pragma omp parallel num_threads(nthreads)
+{
+  #pragma omp single
+  {
+    for (int c = 0; c < NCOLS; c++) {
+      #pragma omp task firstprivate(c) depend(out: params[c])
+      { /* Stage A: estimate */
+        estimate_params(data[c], nrows,
+          &params[c][0], &params[c][1], &params[c][2]);
+        free(data[c]); data[c] = NULL;
+      }
+      #pragma omp task firstprivate(c) \
+        depend(in: params[c]) depend(out: sums[c])
+      { /* Stage B: simulate */
+        run_column_chunk(c, 0, NUM_SIMS, params[c][0],
+          params[c][1], params[c][2], sums[c], sums2[c]);
+      }
+      #pragma omp task firstprivate(c) depend(in: sums[c])
+      { /* Stage C: finalize */
+        finalize_stats(sums[c], sums2[c], NUM_SIMS,
+          all_mn[c], all_lo[c], all_hi[c]);
+      }
+    }
+    /* fan-in: wait for all 21 tasks (7 cols x 3) */
+    #pragma omp taskwait
+  }
+}
+\end{verbatim}
+
+Each task is the complete pipeline of one column --- one parallel path
+of the dependency graph of Figure 3 --- and the depend clauses encode
+the graph's edges directly in the source code. Tasks
+write disjoint array slots, so no synchronization beyond the final
+taskwait is needed.
+
+\subsection{MPI Version --- Data Parallelism over Simulation Blocks}
+
+\begin{verbatim}
+int s0 = (int)((long long)NUM_SIMS * rank / size);
+int s1 = (int)((long long)NUM_SIMS * (rank + 1) / size);
+MPI_Bcast(params, NCOLS * 3, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+for (int c = 0; c < NCOLS; c++)
+  run_column_chunk(c, s0, s1, params[c*3], params[c*3+1],
+    params[c*3+2], local_sum[c], local_sum2[c]);
+MPI_Reduce(local_sum, glob_sum, NCOLS*DAYS, MPI_DOUBLE,
+  MPI_SUM, 0, MPI_COMM_WORLD);
+MPI_Reduce(local_sum2, glob_sum2, NCOLS*DAYS,
+  MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+if (rank == 0) /* statistics finalized ONLY on reduced sums */
+  for (int c = 0; c < NCOLS; c++)
+    finalize_stats(glob_sum[c], glob_sum2[c],
+                   NUM_SIMS, ...);
+\end{verbatim}
+
+Every rank processes its block of trajectories for all seven columns;
+the only communication events are the initial broadcast and the final
+sum-reduction of the raw accumulators.
+
+\subsection{Hybrid Version}
+
+The hybrid program composes the two mechanisms orthogonally: the MPI
+block decomposition of Section 6.3 selects the local index range [s0,
+s1), and an OpenMP task region executes the seven column pipelines over
+that range inside each rank. Because the model parameters are estimated
+once on rank 0 and broadcast to every rank (Section 3.1), the per-column
+estimation stage is no longer part of the in-rank task graph; inside a
+rank each column is therefore a two-stage pipeline instead of three: a
+simulation task that produces the column's partial sums (depend(out:
+sums[c])), followed by a local-reduce task that copies those sums
+into the rank's MPI send buffer (depend(in: sums[c])). The
+local-reduce task cannot start until the simulation task of the same
+column has finished, because it reads sums[c] that the simulation
+task wrote --- a real producer--consumer dependency; different columns
+remain on independent paths, so up to seven column pipelines run
+concurrently inside a rank, joined by a final taskwait (7 columns $\times$ 2 =
+14 tasks per rank) before the reduction. MPI is initialized with
+MPI\_Init\_thread(\ldots, MPI\_THREAD\_FUNNELED, \ldots) and all MPI
+calls are performed by the master thread outside the parallel region, as
+required by the funnelled threading level. The total worker count is
+ranks $\times$ threads.
+
+\subsection{Timing and Reporting}
+
+All versions measure wall-clock time (QueryPerformanceCounter on
+Windows; MPI\_Wtime and omp\_get\_wtime in the parallel versions), never
+CPU time, so that the sequential baseline and the parallel measurements
+are directly comparable. In the MPI versions the simulation time is
+reduced with MPI\_MAX across ranks: the slowest rank defines T,
+consistently with the fact that the reduction cannot complete earlier.
+Every run appends one row (configuration, workers, T, speedup,
+efficiency, throughput) to a shared CSV file from which the tables and
+plots of Chapter 7 are generated.
+
+\subsection{Correctness Verification}
+
+The position-based seeding makes correctness directly testable: all
+versions must produce identical statistics. This was verified on the
+full benchmark workload: the eleven runs of Chapter 7 (sequential;
+OpenMP with 2, 4, 7 threads; MPI with 2, 4, 8 ranks; hybrid 2$\times$2, 2$\times$4,
+4$\times$2) report identical forecast values and identical confidence intervals
+to all printed digits for every column and every day --- for example,
+the Voltage day-30 forecast is 238.8127 V with 95\% interval
+[229.1495, 248.4759] in every report. In addition, the additivity of
+the block decomposition was unit-tested by comparing a full-range kernel
+invocation with the sum of three uneven sub-range invocations: the
+maximum absolute difference across all accumulators was exactly 0.0.
+
+\section{Performance Evaluation}
+
+\subsection{Setup and Methodology}
+
+All experiments were executed on a single laptop with an Intel Core
+i5-12450H CPU (12th generation, hybrid architecture: 4 performance cores
+with two hardware threads each plus 4 efficiency cores, 8 physical cores
+in total), 16 GB of RAM, running 64-bit Windows. The programs were
+compiled with
+GCC (MinGW-w64) at optimization level -O2; the MPI versions use
+Microsoft MPI and are launched with mpiexec. The workload is fixed at
+NUM\_SIMS = 50,000 trajectories per column, 7 columns, 30 days, 1,440
+steps per day. The machine was connected to AC power with the Windows
+power mode set to best performance and no foreground applications
+running. Timings refer to the simulation phase measured with wall-clock
+timers; for MPI runs the time of the slowest rank is reported. Anomalous
+single measurements were re-executed and the best observed time is
+reported; in particular the 2-rank MPI configuration was measured twice
+(441.1 s and 408.1 s) and the better value is used, the residual gap
+from the theoretical expectation being attributed to core placement
+(Section 5.3).
+
+\subsection{Metrics for Performance Evaluation}
+
+Three standard metrics are used. The execution time T is the simulation
+wall time with n processing elements. The speedup is $S = T_1 / T$, where $T_1 =
+675.140$ s is the sequential baseline; linear (ideal) speedup corresponds
+to $S = n$. The efficiency is $E = S / n$, the fraction of ideal speedup
+actually achieved; $E = 100\%$ means perfect utilization of the n
+processing elements. A throughput value (simulated trajectories per
+second) is also recorded for convenience. For the task-parallel level a
+theoretical bound complements the metrics: the makespan cannot be
+smaller than the longest of the seven tasks, hence $S \leq T_1 / \max_c(t_c) \approx
+4.56$ regardless of the thread count.
+
+\subsection{Results and Analysis}
+
+Tables 1--3 report the measured times, speedups and efficiencies of the
+three required configurations; Figure 5 compares the execution times,
+Figure 6 the speedups against the ideal line and Figure 7 the
+efficiencies.
+
+\emph{Table 1: Pure OpenMP (task parallelism). Baseline $T_1 = 675.140$ s.}
+
+{\def\LTcaptype{none}
+\begin{longtable}[]{@{}
+  >{\centering\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\centering\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\centering\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\centering\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2499}}@{}}
+\toprule\noalign{}
+\textbf{Threads (n)} & \textbf{T(s)} & \textbf{Speedup S} & \textbf{Efficiency E} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+1 (sequential) & 675.140 & 1.000 & 100.0\% \\
+2 & 480.664 & 1.405 & 70.2\% \\
+4 & 351.293 & 1.922 & 48.0\% \\
+7 & 254.328 & 2.655 & 37.9\% \\
+\end{longtable}
+}
+
+\emph{Table 2: Pure MPI (data parallelism). Baseline $T_1 = 675.140$ s.}
+
+{\def\LTcaptype{none}
+\begin{longtable}[]{@{}
+  >{\centering\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\centering\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\centering\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\centering\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2499}}@{}}
+\toprule\noalign{}
+\textbf{Ranks (n)} & \textbf{T(s)} & \textbf{Speedup S} & \textbf{Efficiency E} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+1 (sequential) & 675.140 & 1.000 & 100.0\% \\
+2 & 354.248 & 1.906 & 95.3\% \\
+4 & 250.278 & 2.698 & 67.4\% \\
+8 & 185.957 & 3.631 & 45.4\% \\
+\end{longtable}
+}
+
+\emph{Table 3: Hybrid MPI $\times$ OpenMP. Baseline $T_1 = 675.140$ s.}
+
+{\def\LTcaptype{none}
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2500}}
+  >{\centering\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1500}}
+  >{\centering\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\centering\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\centering\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}@{}}
+\toprule\noalign{}
+\textbf{Configuration} & \textbf{Workers (n)} & \textbf{T(s)} & \textbf{Speedup S} & \textbf{Efficiency E} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+2 ranks $\times$ 2 threads & 4 & 277.709 & 2.431 & 60.8\% \\
+2 ranks $\times$ 4 threads & 8 & 203.475 & 3.318 & 41.5\% \\
+4 ranks $\times$ 2 threads & 8 & 201.589 & 3.349 & 41.9\% \\
+\end{longtable}
+}
+
+\begin{quote}
+\emph{Figure 5: Simulation time by configuration (NUM\_SIMS = 50,000,
+Intel i5-12450H). The MPI 8-rank configuration is the fastest overall at
+186.0 s.}
+\end{quote}
+
+\includegraphics[width=4.0625in,height=2.94167in]{media/image7.png}
+
+\begin{quote}
+\emph{Figure 6: Speedup versus number of processing elements, with the
+ideal line S = n and the task-parallel upper bound T/max(task) = 4.56.
+The MPI/hybrid configurations dominate at every worker count.}
+\end{quote}
+
+\includegraphics[width=4.0625in,height=2.94167in]{media/image8.png}
+
+\begin{quote}
+\emph{Figure 7: Efficiency versus number of processing elements.
+Efficiency decreases with n on all curves, with a marked drop beyond
+four workers when the efficiency cores of the CPU come into play.}
+\end{quote}
+
+The headline result is that the data-parallel MPI version scales best on
+this machine: the 8-rank configuration completes in 186.0 s ($S = 3.63$, $E
+= 45.4\%$), faster than the best pure OpenMP configuration (254.3 s with
+7 threads) and the best hybrid configuration (201.6 s with 4 ranks $\times$ 2
+threads). This reflects the strength of data parallelism: equal-sized
+simulation blocks give near-perfect load balance and require only two
+short collective operations, so MPI keeps improving as ranks are added
+up to the core count, whereas the task-parallel level is capped at seven
+unequal tasks.
+
+The pure OpenMP curve follows the task-granularity theory
+quantitatively. At 2 threads, efficiency is reasonable (70.2\%) because
+the seven tasks pack into two workers. At 4 threads the speedup is 1.92:
+packing seven unequal tasks (62--148 s, Figure 8) into four workers
+requires two waves and the measured makespan matches the scheduling
+bound almost exactly. At 7 threads the speedup is 2.66 against the
+imbalance bound of 4.56; the gap is explained by the recorded per-task
+times, which inflate uniformly to 250 s under full concurrency --- the
+signature of the lower all-core turbo frequency and of tasks placed on
+efficiency cores. The task level therefore hits three stacked ceilings:
+the task count (7), the longest task (4.56$\times$) and the hardware
+frequency/heterogeneity, in that order of severity.
+
+The pure MPI curve shows the complementary behaviour. At 2 ranks the
+speedup is 1.91 (95.3\% efficiency) --- almost perfect, because two
+equal blocks map cleanly onto two performance cores with negligible
+communication. At 4 ranks the speedup rises to 2.70 (67.4\%), and at 8
+ranks to 3.63 (45.4\%): MPI
+keeps improving as ranks are added, since the block decomposition stays
+perfectly balanced. The efficiency drop beyond four workers is a
+hardware effect --- four of the eight ranks must run on the slower
+efficiency cores, and the all-core turbo frequency is lower --- not a
+load-balancing or communication limit, which remain negligible
+throughout.
+
+Finally, the comparison between the two 8-worker hybrid configurations
+isolates the value of rank placement: 4$\times$2 (201.6 s) slightly outperforms
+2$\times$4 (203.5 s) with the same worker count, because four ranks anchor the
+computation on the four performance cores and split the trajectory load
+evenly among them, whereas with two ranks each process must spread its
+four threads across heterogeneous cores and the task imbalance weighs
+more inside each rank.
+
+\subsection{Challenges and Limitations}
+
+Three limitations qualify the results. First, the experiments run on a
+single machine: the MPI level is exercised across processes, not across
+physical nodes, so network costs are absent; on a real cluster the
+constant 3.6 KB communication volume would still be negligible, but
+latency would add a small fixed cost per run. Second, the CPU
+heterogeneity (P-cores and E-cores) caps the achievable efficiency at
+high worker counts independently of the software design; the reported
+efficiencies at n = 8 measure the hardware as much as the program.
+Third, single-run timing noise on a desktop operating system is
+non-negligible; the methodology mitigates it by controlled conditions
+and re-execution of anomalous points, but a production-grade study would
+report averages with confidence intervals over many repetitions. A
+natural extension of the study is a problem-size scaling analysis
+(varying NUM\_SIMS) to show the amortization of the constant overheads.
+
+\subsection{Conclusions}
+
+The project implemented and compared four versions of a Monte Carlo
+forecasting workload: sequential, task-parallel with OpenMP,
+data-parallel with MPI, and hybrid. All versions provably compute
+identical results thanks to a position-based random seeding scheme. The
+experimental study on an 8-core hybrid CPU shows that the data-parallel
+MPI level scales with near-perfect balance up to the number of
+homogeneous cores, that the task-parallel OpenMP level is bounded by its
+fixed granularity (7 tasks) and by task imbalance (upper bound 4.56$\times$),
+and that the hybrid composition outperforms both pure approaches,
+reaching a 3.63$\times$ speedup (186.0 s versus 675.1 s) with the 8-rank MPI
+configuration, while the best hybrid (4$\times$2) reaches 3.35$\times$ (201.6 s).
+Beyond the raw numbers, the measurements quantify three general lessons
+of parallel computing on modern hardware: makespan is governed by the
+slowest worker, task granularity bounds task-level speedup, and
+process-to-core mapping on heterogeneous CPUs is a first-order
+performance factor.
+
+\section{References}
+
+\begin{enumerate}
+\item G. H\'{e}brail and A. B\'{e}rard, ``Individual household electric power
+consumption Data Set'', UCI Machine Learning Repository, 2012.
+
+\item Message Passing Interface Forum, ``MPI: A Message-Passing
+Interface Standard'', \url{https://www.mpi-forum.org}.
+
+\item OpenMP Architecture Review Board, ``OpenMP Application
+Programming Interface Specification'', \url{https://www.openmp.org}.
+
+\item P. Pacheco, ``An Introduction to Parallel Programming'', Morgan
+Kaufmann, 2011.
+
+\item J. S. Rosenthal, ``Parallel computing and Monte Carlo
+algorithms'', Far East Journal of Theoretical Statistics, vol. 4, pp.
+207--236, 2000.
+
+\item I. Foster, ``Designing and Building Parallel Programs'',
+Addison-Wesley, 1995.
+\end{enumerate}
+
+\end{document}

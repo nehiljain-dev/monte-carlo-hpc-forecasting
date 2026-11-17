@@ -1,0 +1,27 @@
+===== HPC PROJECT REPORT =====
+Version    : OpenMP (2 threads)
+Sims/col   : 50000
+Days       : 30
+
+Sim Time   : 480.664 sec  (parallel computation only)
+Wall Time  : 480.664 sec  (includes I/O and communication)
+Speedup    : 1.405  (Sn = T1 / Tn)
+Efficiency : 70.23%  (En = Sn / n)
+Throughput : 728.2 sims/s
+
+Column                      Unit      Day-1     Day-15     Day-30   ColTime(s)
+------------------------------------------------------------------------
+Global_active_power           kW     1.3444     1.2933     1.2347     120.2750
+  95% CI day-30: [0.0000 , 3.6889]
+Global_reactive_power       kVAR     0.0940     0.0679     0.0390     243.1720
+  95% CI day-30: [-0.4582 , 0.5361]
+Voltage                        V   238.6745   238.7338   238.8127     372.7550
+  95% CI day-30: [229.1495 , 248.4759]
+Global_intensity               A     5.6759     5.4381     5.1964     480.6600
+  95% CI day-30: [0.0000 , 15.8091]
+Sub_metering_1                Wh     0.0000     0.0000     0.0000     372.7530
+  95% CI day-30: [0.0000 , 0.0000]
+Sub_metering_2                Wh     0.3863     0.3869     0.3839     243.1690
+  95% CI day-30: [0.0000 , 3.2485]
+Sub_metering_3                Wh     3.5950     2.9452     2.2487     120.2740
+  95% CI day-30: [0.0000 , 35.0923]
